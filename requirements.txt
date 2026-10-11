@@ -1,0 +1,7 @@
+# Needed only for the on-page advisor (Ask the advisor).
+# The rest of the app uses the Python standard library.
+#
+# On Windows, install the prebuilt CPU wheel:
+#   pip install --only-binary=:all: -r requirements.txt --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cpu
+llama-cpp-python>=0.3.36
+diskcache

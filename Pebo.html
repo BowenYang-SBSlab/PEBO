@@ -1,0 +1,513 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Pebo</title>
+<style>
+/* Layout: full-height stage with the 3D character centered, small header above, controls below. */
+:root {
+  --bg: #dff1fb;
+  --bg-glow: #fff6d6;
+  --fg: #1d2a3a;
+  --muted: #55697f;
+  --btn-bg: #fff8e1;
+  --btn-border: #e2a21b;
+  --btn-fg: #7a3d00;
+  --btn-active: #ffc21a;
+  --font-display: "Baloo 2", "Trebuchet MS", system-ui, sans-serif;
+  --font-body: "Nunito", system-ui, -apple-system, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #141a3a; --bg-glow: #2a2358; --fg: #f4efe3; --muted: #a5accb;
+    --btn-bg: #241f4a; --btn-border: #ffc21a; --btn-fg: #ffe7a3; --btn-active: #b8780a;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #141a3a; --bg-glow: #2a2358; --fg: #f4efe3; --muted: #a5accb;
+  --btn-bg: #241f4a; --btn-border: #ffc21a; --btn-fg: #ffe7a3; --btn-active: #b8780a;
+  color-scheme: dark;
+}
+html, body { height: 100%; }
+body {
+  background: radial-gradient(ellipse at 50% 38%, var(--bg-glow) 0%, var(--bg) 62%);
+  background-color: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-body);
+  padding-inline: 16px;
+  padding-block: 14px;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+header { text-align: center; }
+h1 {
+  font-family: var(--font-display);
+  font-size: clamp(1.6rem, 5vw, 2.4rem);
+  margin: 0;
+  line-height: 1.1;
+  text-wrap: balance;
+}
+header p { margin: 4px 0 0; color: var(--muted); font-size: 0.95rem; }
+#stage {
+  flex: 1;
+  min-height: 340px;
+  min-width: 0;
+  position: relative;
+  touch-action: none;
+  cursor: grab;
+}
+#stage:active { cursor: grabbing; }
+#stage canvas { display: block; width: 100%; height: 100%; }
+.hint { margin: 0; text-align: center; color: var(--muted); font-size: 0.85rem; }
+.controls { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+button {
+  font: 700 1rem var(--font-body);
+  padding: 9px 20px;
+  border-radius: 999px;
+  border: 2px solid var(--btn-border);
+  background: var(--btn-bg);
+  color: var(--btn-fg);
+  cursor: pointer;
+}
+button[aria-pressed="true"] { background: var(--btn-active); }
+button:focus-visible { outline: 3px solid var(--fg); outline-offset: 2px; }
+</style>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@700&family=Nunito:wght@700&display=swap">
+
+<header>
+  <h1>Pebo</h1>
+  <p>Personal Energy Building Optimizer</p>
+</header>
+<div id="stage" role="img" aria-label="Pebo, a 3D animated happy sun with a round body, smiling with closed eyes and waving"></div>
+<div class="controls">
+  <button id="waveBtn" aria-pressed="true">Wave</button>
+  <button id="spinBtn">Spin</button>
+</div>
+<p class="hint">Drag to turn Pebo around.</p>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+(function () {
+  var stage = document.getElementById('stage');
+  var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var amp = reduce ? 0.3 : 1;
+
+  var renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  renderer.outputEncoding = THREE.sRGBEncoding;
+  stage.appendChild(renderer.domElement);
+
+  var scene = new THREE.Scene();
+  var camera = new THREE.PerspectiveCamera(35, 1, 3, 40);
+  camera.position.set(0, 0.8, 10.5);
+  camera.lookAt(0, 0.35, 0);
+
+  scene.add(new THREE.HemisphereLight(0xfff4d6, 0xffb36b, 0.85));
+  var key = new THREE.DirectionalLight(0xffffff, 0.75);
+  key.position.set(3, 5, 6);
+  scene.add(key);
+
+  // Hand-scribbled texture, echoing the original drawing's hatched strokes
+  function scribble(base, light, dark) {
+    var c = document.createElement('canvas');
+    c.width = c.height = 512;
+    var g = c.getContext('2d');
+    g.fillStyle = base; g.fillRect(0, 0, 512, 512);
+    g.lineCap = 'round'; g.lineJoin = 'round';
+    var seed = 7;
+    function rnd() { seed = (seed * 16807) % 2147483647; return seed / 2147483647; }
+    for (var i = 0; i < 520; i++) {
+      g.strokeStyle = rnd() > 0.5 ? light : dark;
+      g.globalAlpha = 0.55;
+      g.lineWidth = 3 + rnd() * 4;
+      var x = rnd() * 512, y = rnd() * 512, a = rnd() * Math.PI;
+      g.beginPath(); g.moveTo(x, y);
+      for (var k = 0; k < 4; k++) {
+        a += (k % 2 ? 1 : -1) * (1.2 + rnd() * 0.6);
+        x += Math.cos(a) * 16; y += Math.sin(a) * 16;
+        g.lineTo(x, y);
+      }
+      g.stroke();
+    }
+    var t = new THREE.CanvasTexture(c);
+    t.encoding = THREE.sRGBEncoding;
+    t.anisotropy = 4;
+    return t;
+  }
+
+  var yellow = new THREE.MeshStandardMaterial({ color: 0xf2b310, roughness: 0.55 });
+  var red = new THREE.MeshStandardMaterial({ color: 0xff8a2a, roughness: 0.5 });
+  var orangeA = new THREE.MeshStandardMaterial({ color: 0xf26b1d, roughness: 0.6 });
+  var orangeB = new THREE.MeshStandardMaterial({ color: 0xff9a1f, roughness: 0.6 });
+  var pink = new THREE.MeshStandardMaterial({ color: 0xff7fae, roughness: 0.5 });
+  var ink = new THREE.MeshBasicMaterial({ color: 0x1a1208 });
+
+  var sun = new THREE.Group();
+  scene.add(sun);
+
+  // Round body
+  // Body, chubby legs and arms are meshed as ONE blended surface (surface nets on a
+  // signed distance field), so there are no seams where limbs join. The arms are then
+  // bent smoothly with soft per-vertex weights.
+  var ARM_REST = 1.0;
+  var PIV = [[-0.84, -0.15, 0.1], [0.84, -0.15, 0.1]];
+  function smin(a, b, k) {
+    var h = Math.max(k - Math.abs(a - b), 0) / k;
+    return Math.min(a, b) - h * h * k * 0.25;
+  }
+  function roundCone(px, py, pz, ax, ay, az, bx, by, bz, r1, r2) {
+    var dx = bx - ax, dy = by - ay, dz = bz - az;
+    var t = ((px - ax) * dx + (py - ay) * dy + (pz - az) * dz) / (dx * dx + dy * dy + dz * dz);
+    t = t < 0 ? 0 : t > 1 ? 1 : t;
+    var cx = ax + dx * t - px, cy = ay + dy * t - py, cz = az + dz * t - pz;
+    return Math.sqrt(cx * cx + cy * cy + cz * cz) - (r1 + (r2 - r1) * t);
+  }
+  function sdf(x, y, z) {
+    var d = Math.sqrt(x * x + (y + 0.62) * (y + 0.62) + z * z) - 1.1;
+    for (var si = 0; si < 2; si++) {
+      var s = si ? 1 : -1, a = PIV[si];
+      d = smin(d, Math.sqrt((x - a[0]) * (x - a[0]) + (y - a[1]) * (y - a[1]) + (z - a[2]) * (z - a[2])) - 0.38, 0.18);
+      d = smin(d, roundCone(x, y, z, s * 0.56, -1.3, 0.2, s * 0.56, -1.62, 0.2, 0.38, 0.38), 0.22);
+    }
+    return d;
+  }
+  var GH = 0.05, GX0 = -1.95, GY0 = -2.1, GZ0 = -1.35;
+  var GNX = Math.round(3.9 / GH) + 1, GNY = Math.round(2.9 / GH) + 1, GNZ = Math.round(2.7 / GH) + 1;
+  var gv = new Float32Array(GNX * GNY * GNZ);
+  function gi(i, j, k) { return i + GNX * (j + GNY * k); }
+  function ci(i, j, k) { return i + (GNX - 1) * (j + (GNY - 1) * k); }
+  var gi0, gj0, gk0;
+  for (gk0 = 0; gk0 < GNZ; gk0++) for (gj0 = 0; gj0 < GNY; gj0++) for (gi0 = 0; gi0 < GNX; gi0++) {
+    gv[gi(gi0, gj0, gk0)] = sdf(GX0 + gi0 * GH, GY0 + gj0 * GH, GZ0 + gk0 * GH);
+  }
+  var cellVert = new Int32Array((GNX - 1) * (GNY - 1) * (GNZ - 1)).fill(-1);
+  var posList = [], cv = new Float32Array(8), EDGES = [];
+  for (var c0 = 0; c0 < 8; c0++) [1, 2, 4].forEach(function (b) { if (!(c0 & b)) EDGES.push([c0, c0 | b]); });
+  for (var ck = 0; ck < GNZ - 1; ck++) for (var cj = 0; cj < GNY - 1; cj++) for (var cI = 0; cI < GNX - 1; cI++) {
+    var neg = 0;
+    for (var cc = 0; cc < 8; cc++) {
+      var vv = gv[gi(cI + (cc & 1), cj + ((cc >> 1) & 1), ck + ((cc >> 2) & 1))];
+      cv[cc] = vv; if (vv < 0) neg++;
+    }
+    if (neg === 0 || neg === 8) continue;
+    var sx = 0, sy = 0, sz = 0, cnt = 0;
+    for (var ee = 0; ee < EDGES.length; ee++) {
+      var ea = EDGES[ee][0], eb = EDGES[ee][1], va = cv[ea], vb = cv[eb];
+      if ((va < 0) !== (vb < 0)) {
+        var tt = va / (va - vb);
+        sx += (ea & 1) + ((eb & 1) - (ea & 1)) * tt;
+        sy += ((ea >> 1) & 1) + (((eb >> 1) & 1) - ((ea >> 1) & 1)) * tt;
+        sz += ((ea >> 2) & 1) + (((eb >> 2) & 1) - ((ea >> 2) & 1)) * tt;
+        cnt++;
+      }
+    }
+    posList.push(GX0 + (cI + sx / cnt) * GH, GY0 + (cj + sy / cnt) * GH, GZ0 + (ck + sz / cnt) * GH);
+    cellVert[ci(cI, cj, ck)] = posList.length / 3 - 1;
+  }
+  var NV = posList.length / 3;
+  var bodyP = new Float32Array(posList), bodyN = new Float32Array(NV * 3);
+  var gE = 0.012;
+  function gradAt(x, y, z, o) {
+    var gx = sdf(x + gE, y, z) - sdf(x - gE, y, z);
+    var gy = sdf(x, y + gE, z) - sdf(x, y - gE, z);
+    var gz = sdf(x, y, z + gE) - sdf(x, y, z - gE);
+    var l = Math.sqrt(gx * gx + gy * gy + gz * gz) || 1;
+    o[0] = gx / l; o[1] = gy / l; o[2] = gz / l;
+  }
+  var gtmp = [0, 0, 0];
+  for (var pv = 0; pv < NV; pv++) {
+    var px0 = bodyP[pv * 3], py0 = bodyP[pv * 3 + 1], pz0 = bodyP[pv * 3 + 2];
+    for (var it = 0; it < 2; it++) {
+      var dd = Math.max(-0.05, Math.min(0.05, sdf(px0, py0, pz0)));
+      gradAt(px0, py0, pz0, gtmp);
+      px0 -= dd * gtmp[0]; py0 -= dd * gtmp[1]; pz0 -= dd * gtmp[2];
+    }
+    gradAt(px0, py0, pz0, gtmp);
+    bodyP[pv * 3] = px0; bodyP[pv * 3 + 1] = py0; bodyP[pv * 3 + 2] = pz0;
+    bodyN[pv * 3] = gtmp[0]; bodyN[pv * 3 + 1] = gtmp[1]; bodyN[pv * 3 + 2] = gtmp[2];
+  }
+  var bodyIdx = [];
+  function tri(a, b, c) {
+    var ux = bodyP[b * 3] - bodyP[a * 3], uy = bodyP[b * 3 + 1] - bodyP[a * 3 + 1], uz = bodyP[b * 3 + 2] - bodyP[a * 3 + 2];
+    var wx = bodyP[c * 3] - bodyP[a * 3], wy = bodyP[c * 3 + 1] - bodyP[a * 3 + 1], wz = bodyP[c * 3 + 2] - bodyP[a * 3 + 2];
+    var nx = uy * wz - uz * wy, ny = uz * wx - ux * wz, nz = ux * wy - uy * wx;
+    var gx = bodyN[a * 3] + bodyN[b * 3] + bodyN[c * 3];
+    var gy = bodyN[a * 3 + 1] + bodyN[b * 3 + 1] + bodyN[c * 3 + 1];
+    var gz = bodyN[a * 3 + 2] + bodyN[b * 3 + 2] + bodyN[c * 3 + 2];
+    if (nx * gx + ny * gy + nz * gz < 0) bodyIdx.push(a, c, b); else bodyIdx.push(a, b, c);
+  }
+  function quad(a, b, c, d) { tri(a, b, c); tri(a, c, d); }
+  for (var fk = 1; fk < GNZ - 1; fk++) for (var fj = 1; fj < GNY - 1; fj++) for (var fi = 0; fi < GNX - 1; fi++) {
+    if ((gv[gi(fi, fj, fk)] < 0) !== (gv[gi(fi + 1, fj, fk)] < 0))
+      quad(cellVert[ci(fi, fj - 1, fk - 1)], cellVert[ci(fi, fj, fk - 1)], cellVert[ci(fi, fj, fk)], cellVert[ci(fi, fj - 1, fk)]);
+  }
+  for (var yk = 1; yk < GNZ - 1; yk++) for (var yj = 0; yj < GNY - 1; yj++) for (var yi = 1; yi < GNX - 1; yi++) {
+    if ((gv[gi(yi, yj, yk)] < 0) !== (gv[gi(yi, yj + 1, yk)] < 0))
+      quad(cellVert[ci(yi - 1, yj, yk - 1)], cellVert[ci(yi, yj, yk - 1)], cellVert[ci(yi, yj, yk)], cellVert[ci(yi - 1, yj, yk)]);
+  }
+  for (var zk = 0; zk < GNZ - 1; zk++) for (var zj = 1; zj < GNY - 1; zj++) for (var zi = 1; zi < GNX - 1; zi++) {
+    if ((gv[gi(zi, zj, zk)] < 0) !== (gv[gi(zi, zj, zk + 1)] < 0))
+      quad(cellVert[ci(zi - 1, zj - 1, zk)], cellVert[ci(zi, zj - 1, zk)], cellVert[ci(zi, zj, zk)], cellVert[ci(zi - 1, zj, zk)]);
+  }
+  var bodyBaseP = Float32Array.from(bodyP), bodyBaseN = Float32Array.from(bodyN);
+  var bodyGeo = new THREE.BufferGeometry();
+  bodyGeo.setAttribute('position', new THREE.BufferAttribute(bodyP, 3));
+  bodyGeo.setAttribute('normal', new THREE.BufferAttribute(bodyN, 3));
+  bodyGeo.setIndex(bodyIdx);
+  var body = new THREE.Mesh(bodyGeo, yellow);
+  body.frustumCulled = false;
+  sun.add(body);
+
+  // Arms: separate tapered pieces whose rounded root sits inside the shoulder knob,
+  // so they rotate like a ball joint and never stretch the body surface.
+  var armCurve = new THREE.SplineCurve([[0.001, 0.37], [0.14, 0.35], [0.26, 0.26], [0.35, 0.12], [0.37, 0], [0.36, -0.25], [0.33, -0.5], [0.33, -0.72], [0.25, -0.94], [0.001, -1.03]]
+    .reverse().map(function (q) { return new THREE.Vector2(q[0], q[1]); }));
+  var armMeshGeo = new THREE.LatheGeometry(armCurve.getPoints(60), 36);
+  var armPivots = [0, 1].map(function (si) {
+    var g = new THREE.Group();
+    g.position.set(PIV[si][0], PIV[si][1], PIV[si][2]);
+    g.rotation.z = (si ? 1 : -1) * ARM_REST;
+    g.add(new THREE.Mesh(armMeshGeo, yellow));
+    sun.add(g);
+    return g;
+  });
+  function bendArm(si, delta) { armPivots[si].rotation.z = (si ? 1 : -1) * ARM_REST + delta; }
+
+  // Belly patch
+  var belly = new THREE.Mesh(new THREE.SphereGeometry(1, 36, 24), red);
+  belly.scale.set(0.68, 0.62, 0.2);
+  belly.position.set(0, -0.76, 0.92);
+  sun.add(belly);
+
+  // Feet
+  var legCurve = new THREE.SplineCurve([[0.001, 0.4], [0.36, 0.3], [0.45, 0.1], [0.43, -0.15], [0.45, -0.33], [0.31, -0.47], [0.001, -0.51]]
+    .map(function (p) { return new THREE.Vector2(p[0], p[1]); }));
+  var legGeo = new THREE.LatheGeometry(legCurve.getPoints(60), 36);
+  [-1, 1].forEach(function (s) {
+    var f = new THREE.Mesh(legGeo, yellow);
+    f.scale.set(1, 1, 1.2);
+    f.position.set(s * 0.5, -1.41, 0.2);
+    // (legs are part of the blended body mesh now)
+  });
+
+  // Arms (pivot at the shoulder)
+  // Tapered limbs: widest at the root, which sits inside the body, so they blend in
+  function limbGeo(pts) {
+    var curve = new THREE.SplineCurve(pts.map(function (p) { return new THREE.Vector2(p[0], p[1]); }));
+    return new THREE.LatheGeometry(curve.getPoints(60), 36);
+  }
+  var armGeo = limbGeo([[0.001, 0.3], [0.3, 0.22], [0.36, 0.05], [0.32, -0.3], [0.27, -0.6], [0.28, -0.82], [0.22, -0.98], [0.001, -1.04]]);
+  function makeArm(side) {
+    var pivot = new THREE.Group();
+    pivot.position.set(side * 0.74, -0.15, 0.1);
+    pivot.add(new THREE.Mesh(armGeo, yellow));
+    return pivot;
+  }
+  var armL = makeArm(-1), armR = makeArm(1);
+
+  // Head group
+  var head = new THREE.Group();
+  head.position.y = 1.15;
+  head.scale.set(1.38, 1.2, 1.2);
+  sun.add(head);
+  var headBall = new THREE.Mesh(new THREE.SphereGeometry(0.95, 48, 36), yellow);
+  head.add(headBall);
+
+  // Flame petals around the head
+  var petals = new THREE.Group();
+  petals.position.z = -0.12;
+  petals.scale.set(1.2 / 1.38, 1, 1);
+  head.add(petals);
+  var petalPivots = [];
+  // Curvy flame swoosh: a rounded, curled shape that all lean the same way
+  var flame = new THREE.Shape();
+  flame.moveTo(-0.28, 0);
+  flame.bezierCurveTo(-0.4, 0.45, 0.02, 0.75, 0.46, 1.05);
+  flame.bezierCurveTo(0.2, 0.68, 0.46, 0.38, 0.28, 0);
+  flame.lineTo(-0.28, 0);
+  var flameGeo = new THREE.ExtrudeGeometry(flame, {
+    depth: 0.14, bevelEnabled: true, bevelThickness: 0.08, bevelSize: 0.06,
+    bevelSegments: 5, curveSegments: 24
+  });
+  flameGeo.translate(0, 0, -0.07);
+  function addPetals(count, offset, length, width, mat, startY) {
+    for (var i = 0; i < count; i++) {
+      var pivot = new THREE.Group();
+      pivot.rotation.z = offset + (i / count) * Math.PI * 2;
+      var m = new THREE.Mesh(flameGeo, mat);
+      var base = length / 1.05;
+      m.scale.set(width / 0.3, base, 1);
+      m.position.y = startY;
+      m.position.z = (mat === orangeB ? -0.14 : 0);
+      pivot.add(m);
+      petals.add(pivot);
+      petalPivots.push({ mesh: m, phase: i * 0.9, base: base });
+    }
+  }
+  addPetals(9, 0, 0.95, 0.3, orangeA, 0.8);
+  addPetals(9, Math.PI / 9, 0.7, 0.26, orangeB, 0.82);
+
+  // Face helpers: place a point on the head's front surface
+  var R = 0.95;
+  function onHead(x, y, lift) {
+    var z = Math.sqrt(Math.max(R * R - x * x - y * y, 0.01)) + (lift || 0.012);
+    return new THREE.Vector3(x, y, z);
+  }
+  function tube(pts, r) {
+    var curve = new THREE.CatmullRomCurve3(pts);
+    return new THREE.Mesh(new THREE.TubeGeometry(curve, 28, r, 8, false), ink);
+  }
+  var eyes = [];
+  // Happy closed eyes with lashes
+  [-1, 1].forEach(function (s) {
+    var cx = s * 0.38, cy = 0.14, pts = [];
+    var eye = new THREE.Group();
+    eye.position.y = cy;
+    head.add(eye);
+    eyes.push(eye);
+    for (var i = -4; i <= 4; i++) {
+      var t = i / 4;
+      pts.push(onHead(cx + t * 0.17, cy + (1 - t * t) * 0.09));
+    }
+    var arc = tube(pts, 0.026);
+    arc.position.y = -cy;
+    eye.add(arc);
+    [-0.7, 0, 0.7].forEach(function (t) {
+      var bx = cx + t * 0.17, by = cy + (1 - t * t) * 0.09;
+      var lash = tube([onHead(bx, by), onHead(bx + t * 0.06, by + 0.11)], 0.014);
+      lash.position.y = -cy;
+      eye.add(lash);
+    });
+  });
+  // Smile
+  var sm = [];
+  for (var j = -4; j <= 4; j++) {
+    var u = j / 4;
+    sm.push(onHead(u * 0.22, -0.3 - (1 - u * u) * 0.1));
+  }
+  head.add(tube(sm, 0.032));
+  // Cheeks
+  [-1, 1].forEach(function (s) {
+    var c = new THREE.Mesh(new THREE.SphereGeometry(0.19, 20, 14), pink);
+    var p = onHead(s * 0.6, -0.12, -0.012);
+    c.position.copy(p);
+    c.scale.set(1, 0.85, 0.3);
+    c.lookAt(p.clone().multiplyScalar(2));
+    head.add(c);
+  });
+
+  // Ground shadow
+  var shadow = new THREE.Mesh(
+    new THREE.CircleGeometry(1.5, 40),
+    new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.16 })
+  );
+  shadow.rotation.x = -Math.PI / 2;
+  shadow.position.y = -2.04;
+  scene.add(shadow);
+
+  // Interaction
+  var yaw = 0, pitch = 0, dragging = false, lx = 0, ly = 0;
+  var spinTarget = 0, spinCur = 0;
+  var waving = true, waveAmt = 1;
+  stage.addEventListener('pointerdown', function (e) {
+    dragging = true; lx = e.clientX; ly = e.clientY;
+    try { stage.setPointerCapture(e.pointerId); } catch (err) {}
+  });
+  stage.addEventListener('pointermove', function (e) {
+    if (!dragging) return;
+    yaw += (e.clientX - lx) * 0.012;
+    pitch = Math.max(-0.5, Math.min(0.5, pitch + (e.clientY - ly) * 0.008));
+    lx = e.clientX; ly = e.clientY;
+  });
+  function endDrag() { dragging = false; }
+  stage.addEventListener('pointerup', endDrag);
+  stage.addEventListener('pointercancel', endDrag);
+
+  var waveBtn = document.getElementById('waveBtn');
+  waveBtn.addEventListener('click', function () {
+    waving = !waving;
+    waveBtn.setAttribute('aria-pressed', String(waving));
+  });
+  document.getElementById('spinBtn').addEventListener('click', function () {
+    spinTarget += Math.PI * 2;
+  });
+
+  function resize() {
+    var w = stage.clientWidth, h = stage.clientHeight;
+    if (!w || !h) return;
+    renderer.setSize(w, h, false);
+    camera.aspect = w / h;
+    // keep the whole character in frame on narrow screens
+    camera.position.z = camera.aspect < 0.8 ? 10.5 / (camera.aspect / 0.8) * 0.92 : 10.5;
+    camera.updateProjectionMatrix();
+    camera.lookAt(0, 0.35, 0);
+  }
+  if (window.ResizeObserver) new ResizeObserver(resize).observe(stage);
+  window.addEventListener('resize', resize);
+  resize();
+
+  // Twinkling sparkles floating around her
+  var sparkles = [];
+  var sparkMat = new THREE.MeshBasicMaterial({ color: 0xfff2a8 });
+  for (var si = 0; si < 14; si++) {
+    var sp = new THREE.Mesh(new THREE.SphereGeometry(0.06, 10, 8), sparkMat);
+    var side = si % 2 ? 1 : -1;
+    sp.position.set(side * (1.7 + Math.random() * 1.2), -1 + Math.random() * 3.8, 0.4 + Math.random() * 1.2);
+    sp.userData = { y: sp.position.y, ph: Math.random() * 6.28, sp: 0.5 + Math.random() * 0.6 };
+    scene.add(sp);
+    sparkles.push(sp);
+  }
+  var nextBlink = 1.5, blinkStart = -1;
+  var clock = new THREE.Clock();
+  function frame() {
+    var t = clock.getElapsedTime();
+    var bob = Math.sin(t * 2.2) * 0.17 * amp;
+    sun.position.y = bob;
+    sun.scale.set(1 + Math.sin(t * 2.2 + 1.6) * 0.012 * amp, 1 - Math.sin(t * 2.2 + 1.6) * 0.012 * amp, 1);
+    shadow.scale.setScalar(1 - bob * 0.5);
+
+    spinCur += (spinTarget - spinCur) * 0.05;
+    var sway = dragging ? 0 : Math.sin(t * 0.7) * 0.28 * amp;
+    sun.rotation.y = yaw + spinCur + sway;
+    sun.rotation.x = pitch;
+
+    head.rotation.z = Math.sin(t * 1.5) * 0.06 * amp;
+    petals.rotation.z = Math.sin(t * 0.8) * 0.1 * amp;
+    petalPivots.forEach(function (p) {
+      var s = 1 + Math.sin(t * 3 + p.phase) * 0.09 * amp;
+      p.mesh.scale.y = p.base * s;
+      p.mesh.rotation.z = Math.sin(t * 2 + p.phase) * 0.08 * amp;
+    });
+
+    waveAmt += ((waving ? 1 : 0) - waveAmt) * 0.08;
+    bendArm(1, waveAmt * (1.0 + Math.sin(t * 7) * 0.25 * amp) + (1 - waveAmt) * Math.sin(t * 2) * 0.05);
+    bendArm(0, Math.sin(t * 2.2) * 0.08 * amp);
+
+    sparkles.forEach(function (s) {
+      var u = s.userData;
+      s.position.y = u.y + Math.sin(t * u.sp + u.ph) * 0.25 * amp;
+      s.scale.setScalar(0.4 + 0.6 * (0.5 + 0.5 * Math.sin(t * 2.4 + u.ph)));
+    });
+
+    // Blink: squash the eyes flat and back every few seconds
+    if (blinkStart < 0 && t > nextBlink) blinkStart = t;
+    var eyeScale = 1;
+    if (blinkStart >= 0) {
+      var k = (t - blinkStart) / 0.22;
+      if (k >= 1) {
+        blinkStart = -1;
+        nextBlink = t + (Math.random() < 0.2 ? 0.25 : 2.5 + Math.random() * 3);
+      } else {
+        eyeScale = 1 - 0.92 * Math.sin(k * Math.PI);
+      }
+    }
+    eyes.forEach(function (e) { e.scale.y = eyeScale; });
+
+    renderer.render(scene, camera);
+    requestAnimationFrame(frame);
+  }
+  frame();
+})();
+</script>
+
+</body></html>

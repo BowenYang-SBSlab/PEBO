@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Personal Building Energy Optimizer</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="wrap">
+
+  <header class="topbar">
+    <div class="brand">
+      <b>Personal Building Energy Optimizer</b>
+      <span>One bill for heating, cooling, lighting and appliances</span>
+    </div>
+    <nav class="pages" id="pageNav">
+      <button type="button" data-page="home" class="on"><em>1</em> Your home</button>
+      <button type="button" data-page="results"><em>2</em> Your plan</button>
+      <button type="button" data-page="advisor"><em>3</em> Ask the advisor</button>
+    </nav>
+  </header>
+
+  <div id="page-home">
+  <header class="hero">
+    <div class="hero-copy">
+      <div class="hero-text">
+        <span class="eyebrow">For the person who lives here</span>
+        <h1>Tell us about your home.</h1>
+        <p>Location, floor plan, the temperatures you like, how you light each room, and when your dishwasher,
+          washer, dryer and range are allowed to run. We simulate a full year and come back with one electricity bill
+          and a schedule you can actually follow.</p>
+      </div>
+      <div class="hero-chips" id="heroChips">
+        <span class="chip">EnergyPlus 26.1</span>
+        <span class="chip">Local advisor · Qwen2.5</span>
+      </div>
+    </div>
+    <figure class="pebo-figure peo-lg">
+      <div data-pebo role="img" aria-label="Pebo, a smiling sun"></div>
+      <figcaption>Pebo</figcaption>
+    </figure>
+  </header>
+  <main class="grid">
+
+    <section class="card" id="s0">
+      <h2><span class="num">1</span>Location</h2>
+      <p class="lead">Where the house sits, and which way the front door faces. That rotation is applied to the EnergyPlus model before every run.</p>
+      <label for="place">Address or neighborhood</label>
+      <input id="place" type="text" value="Buffalo, NY" placeholder="e.g. Elmwood Village, Buffalo, NY">
+      <label for="facing">Front of the house faces</label>
+      <select id="facing">
+        <option value="south" selected>South</option>
+        <option value="west">West</option>
+        <option value="north">North</option>
+        <option value="east">East</option>
+      </select>
+      <p class="small" id="locationNote"></p>
+    </section>
+
+    <section class="card plan-card">
+      <div class="flex between">
+        <h2>Floor plan</h2>
+        <button type="button" id="resetPlan" class="secondary">Reset layout</button>
+      </div>
+      <p class="lead">Type a room’s area, drag its right edge to resize, or drag a room onto another to swap them. This sketch is for display only and is not sent to the simulation. The porch marks the front of the house.</p>
+      <div class="plot" id="plot">
+        <div class="house" id="floorPlan"></div>
+        <div class="front-tag" id="frontTag">Front door · faces south</div>
+      </div>
+    </section>
+
+    <!-- 1 · Occupant schedule -->
+    <section class="card" id="s1">
+      <h2><span class="num">2</span>Daily routine</h2>
+      <p class="lead">Your daily routine drives both the lighting plan and the thermostat setback periods.</p>
+      <div class="four">
+        <div><label for="wake">Wake up</label><input id="wake" type="time" value="07:00"></div>
+        <div><label for="work">Work starts</label><input id="work" type="time" value="09:00"></div>
+        <div><label for="end">Work ends</label><input id="end" type="time" value="17:00"></div>
+        <div><label for="bed">Bedtime</label><input id="bed" type="time" value="23:00"></div>
+      </div>
+      <label for="wfh">Work location</label>
+      <select id="wfh">
+        <option value="yes">Work from home</option>
+        <option value="no">Work away from home</option>
+      </select>
+      <label for="daylux">Daylight contribution during daylight hours (lux, simplified)</label>
+      <input id="daylux" type="number" min="0" max="800" value="100">
+      <p class="small">Weekends are treated as at-home days without a work block. Sunrise and sunset per season
+        follow the Buffalo approximations used by the lighting planner; actual indoor daylight depends on windows,
+        orientation, shading and weather.</p>
+    </section>
+
+    <!-- 2 · Tariff -->
+    <section class="card" id="s2">
+      <h2><span class="num">3</span>Electricity tariff</h2>
+      <p class="lead">This one price schedule is applied to every hour of heating, cooling, lighting and appliances.</p>
+      <label for="tariff">Tariff mode</label>
+      <select id="tariff">
+        <option value="flat">Flat rate (editable total marginal cost)</option>
+        <option value="vtou">National Grid SC-1 VTOU · illustrative supply + published delivery periods</option>
+      </select>
+      <div class="four">
+        <div><label for="flat">Flat $/kWh</label><input id="flat" type="number" min="0" step=".001" value="0.20"></div>
+        <div><label class="one-line" for="offsupply">Off-peak $/kWh</label><input id="offsupply" type="number" min="0" step=".001" value="0.08"></div>
+        <div><label class="one-line" for="onsupply">On-peak $/kWh</label><input id="onsupply" type="number" min="0" step=".001" value="0.11"></div>
+        <div><label class="one-line" for="supersupply">Super-peak $/kWh</label><input id="supersupply" type="number" min="0" step=".001" value="0.18"></div>
+      </div>
+      <label for="fixed">Fixed basic service charge ($/month, added to annual bills)</label>
+      <input id="fixed" type="number" min="0" step=".01" value="19.00">
+      <p class="small">National Grid published VTOU delivery rates: 1.299¢/kWh off-peak (11 PM–7 AM); 12.633¢/kWh
+        on-peak (7 AM–11 PM). Super-peak commodity period: summer weekdays 2–6 PM (June–August). Supply fields are
+        user-editable examples, not live prices. Excludes riders, taxes and account eligibility.</p>
+    </section>
+
+    <!-- 3 · Comfort -->
+    <section class="card wide" id="s3">
+      <h2><span class="num">4</span>Thermal comfort</h2>
+      <p class="lead">Set the indoor temperature band you find comfortable. The optimizer never recommends a
+        setpoint outside it while you are home and awake.</p>
+      <div class="comfort-layout">
+        <div>
+          <div class="range-head">
+            <span>Comfortable indoor temperature range</span>
+            <strong id="rangeLabel">20 °C – 24 °C <small>(68 °F – 75 °F)</small></strong>
+          </div>
+          <div class="dual-range" id="dualRange">
+            <div class="track"></div>
+            <div class="fill" id="rangeFill"></div>
+            <input id="tmin" type="range" min="16" max="28" step="0.5" value="20">
+            <input id="tmax" type="range" min="16" max="28" step="0.5" value="24">
+          </div>
+          <div class="range-scale"><span>16 °C</span><span>19</span><span>22</span><span>25</span><span>28 °C</span></div>
+          <div class="comfort-fields">
+            <div>
+              <label class="one-line" for="resolution">Setpoint recommendation</label>
+              <select id="resolution">
+                <option value="hourly">Hourly schedule (setbacks while asleep or away)</option>
+                <option value="daily">Daily constant setpoints</option>
+              </select>
+            </div>
+            <div>
+              <label class="one-line" for="setback">Sleep / away setback beyond range (°C)</label>
+              <input id="setback" type="number" min="0" max="6" step="0.5" value="2">
+            </div>
+            <div>
+              <label class="one-line" for="step">Sweep step (°C)</label>
+              <select id="step"><option value="1">1.0 °C · coarse</option><option value="0.5">0.5 °C · fine</option></select>
+            </div>
+          </div>
+          <label for="strategy">Sweep strategy</label>
+          <select id="strategy">
+            <option value="fast">Separable sweep · heating and cooling swept independently, then confirmed together</option>
+            <option value="full">Full grid · every heating × cooling combination</option>
+          </select>
+        </div>
+        <aside class="plan-box">
+          <h3>Simulation plan</h3>
+          <div id="planSummary" class="plan-summary">Calculating…</div>
+          <p class="small">One full year per candidate. The baseline keeps the delivered thermostat and lighting.</p>
+        </aside>
+      </div>
+    </section>
+
+    <!-- 4 · Floor plan & lighting inventory -->
+    <section class="card wide" id="s4">
+      <h2><span class="num">5</span>Rooms and lighting</h2>
+      <p class="lead">Fixture wattage becomes the lighting load. The hour-by-hour schedule is built from your daily routine and shown on Your plan. Room areas here do not redraw the floor-plan sketch.</p>
+      <div class="scroll">
+        <table>
+          <thead><tr><th>Room</th><th>Area m²</th><th>Activity target lux</th><th>LPD benchmark W/m²</th><th>Fixtures (type, count, W, lumens each)</th></tr></thead>
+          <tbody id="rooms"></tbody>
+        </table>
+      </div>
+      <div class="three floorplan-row">
+        <div>
+          <label for="otherArea">Other conditioned area (dining, closets, corridors) m²</label>
+          <input id="otherArea" type="number" min="0" step="0.5" value="29.5">
+        </div>
+        <div>
+          <label for="extDuty">Exterior motion-sensor duty cycle while dark (%)</label>
+          <input id="extDuty" type="number" min="0" max="100" step="1" value="10">
+        </div>
+        <div>
+          <label for="scaleModel">EnergyPlus footprint</label>
+          <select id="scaleModel">
+            <option value="yes">Scale model to my conditioned floor area</option>
+            <option value="no">Keep the model's original footprint</option>
+          </select>
+        </div>
+      </div>
+      <div class="area-summary" id="areaSummary"></div>
+      <p class="small">Lux targets are editable design assumptions, not licensed IES values; LPD benchmarks are
+        illustrative and are not New York residential code limits. Utilisation factor 0.60, maintenance factor 0.80,
+        simplified lumen method. Exterior fixtures are assumed motion-controlled (duty cycle above).</p>
+    </section>
+
+    <section class="card wide" id="sApp">
+      <h2><span class="num">6</span>Dishwasher, laundry and cooking</h2>
+      <p class="lead">Each appliance keeps its energy use, but its busiest hour is moved into the window you allow,
+        at the cheapest time on your tariff. The dryer follows the washer. The shifted schedules run inside EnergyPlus,
+        so their electricity is part of the same bill as heating, cooling and lighting.</p>
+      <div class="apps">
+        <div class="app">
+          <label class="check"><input id="dwOn" type="checkbox" checked> Dishwasher</label>
+          <div class="two">
+            <div><label for="dwFrom">Window opens</label><input id="dwFrom" type="time" value="21:00"></div>
+            <div><label for="dwTo">Window closes</label><input id="dwTo" type="time" value="07:00"></div>
+          </div>
+          <p class="small">Overnight is fine. A window that passes midnight is allowed.</p>
+        </div>
+        <div class="app">
+          <label class="check"><input id="cwOn" type="checkbox" checked> Clothes washer</label>
+          <div class="two">
+            <div><label for="cwFrom">Window opens</label><input id="cwFrom" type="time" value="21:00"></div>
+            <div><label for="cwTo">Window closes</label><input id="cwTo" type="time" value="07:00"></div>
+          </div>
+          <p class="small">The washer’s busiest hour is placed inside this window.</p>
+        </div>
+        <div class="app">
+          <label class="check"><input id="drOn" type="checkbox" checked> Electric dryer</label>
+          <label class="check sub"><input id="drFollow" type="checkbox" checked> Start with the washer, so laundry stays in order</label>
+          <p class="small">Shifted by the same number of hours as the clothes washer.</p>
+        </div>
+        <div class="app">
+          <label class="check"><input id="rgOn" type="checkbox" checked> Electric range</label>
+          <div class="two">
+            <div><label for="rgFrom">Dinner may start</label><input id="rgFrom" type="time" value="18:00"></div>
+            <div><label for="rgTo">Dinner finished by</label><input id="rgTo" type="time" value="21:00"></div>
+          </div>
+          <p class="small">Keeps cooking near the evening meal, and off the summer super-peak when your window allows.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- 6 · Run -->
+    <section class="card wide run-card" id="s6">
+      <div class="flex between">
+        <div>
+          <h2><span class="num">7</span>Run Optimization</h2>
+          <p class="lead" id="runLead">Compare the baseline with each candidate schedule on this computer, then open the bill on Your plan.</p>
+        </div>
+        <button id="optimize" class="primary big">Run Optimization</button>
+      </div>
+      <div id="progress" class="progress hidden">
+        <div class="bar"><div id="progressFill"></div></div>
+        <div class="flex between"><span id="progressText">Starting…</span><span id="progressCount"></span></div>
+        <pre id="progressLog"></pre>
+      </div>
+      <div id="runError" class="error hidden"></div>
+    </section>
+
+  </main>
+  </div>
+
+  <div id="page-results" class="hidden">
+  <main class="grid">
+    <section class="card wide empty" id="resultsEmpty">
+      <div class="with-pebo">
+        <div>
+          <h2>Your plan will appear here</h2>
+          <p class="lead">Fill in your home on the first page and run the optimization. This page then shows one electricity
+            bill, the lighting schedule generated from your daily routine, the thermostat, and the times to run each appliance.</p>
+          <button type="button" class="secondary" data-page="home">Back to your home</button>
+        </div>
+        <div class="pebo-slot peo-md" data-pebo role="img" aria-label="Pebo, a smiling sun"></div>
+      </div>
+    </section>
+    <section class="results hidden" id="results">
+      <div class="card wide">
+        <div class="with-pebo result-hello">
+          <div>
+            <h2>Your lowest annual electricity bill</h2>
+            <p class="lead" id="resultLead"></p>
+          </div>
+          <div class="pebo-slot peo-sm" data-pebo role="img" aria-label="Pebo, a smiling sun"></div>
+        </div>
+        <div class="kpis" id="kpis"></div>
+      </div>
+
+      <div class="card wide">
+        <h3>Where the bill comes from</h3>
+        <p class="small">Every hour of heating, cooling, lighting, the dishwasher, washer, dryer and range is priced with the tariff you entered. The rows add up to the energy charge; the basic service charge sits on top.</p>
+        <div id="billChart" class="chart"></div>
+        <div class="scroll"><table class="compact" id="billTable"></table></div>
+      </div>
+
+      <div class="card wide" id="lightingSchedule">
+        <div class="flex between">
+          <h3>Lighting schedule</h3>
+          <div class="flex">
+            <select id="season" title="Season shown in the timeline">
+              <option value="winter">Winter (Dec–Feb)</option>
+              <option value="shoulder" selected>Spring / fall (Mar–May, Sep–Nov)</option>
+              <option value="summer">Summer (Jun–Aug)</option>
+            </select>
+            <button id="csv" type="button" class="secondary">Export schedule CSV</button>
+          </div>
+        </div>
+        <p class="small">Generated from your daily routine. Weekends are at-home days. The month shown here is one season only; the lighting line in the bill above is the full year. Switch the season to see how daylight changes the hours.</p>
+        <div class="four" id="metrics"></div>
+        <div class="scroll" style="margin-top:18px"><div id="timeline"></div></div>
+        <div class="legend">
+          <span><i class="sw active"></i>Electric lighting in use</span>
+          <span><i class="sw low"></i>Reduced night scene</span>
+          <span><i class="sw"></i>Off / daylight only</span>
+        </div>
+        <div id="lightNotes" class="notes"></div>
+      </div>
+
+      <div class="card wide">
+        <h3>When to run each appliance</h3>
+        <p class="small" id="applianceNote"></p>
+        <div id="applianceChart" class="chart"></div>
+        <div class="scroll"><table class="compact" id="applianceTable"></table></div>
+      </div>
+
+      <div class="card wide">
+        <div class="flex between">
+          <h3>Recommended thermostat setpoints</h3>
+          <div class="flex">
+            <div class="seg" id="dayToggle"><button data-day="weekday" class="on">Weekday</button><button data-day="weekend">Weekend</button></div>
+            <button id="spCsv" class="secondary">Download setpoint CSV</button>
+          </div>
+        </div>
+        <p class="small" id="spSummary"></p>
+        <div id="spChart" class="chart"></div>
+        <div class="scroll tall"><table class="compact" id="spTable"></table></div>
+      </div>
+
+      <div class="card">
+        <h3>Annual electricity bill across the comfort range</h3>
+        <p class="small" id="sweepNote"></p>
+        <div id="sweepChart" class="chart"></div>
+      </div>
+
+      <div class="card">
+        <h3>Monthly electricity · baseline vs optimized</h3>
+        <p class="small">Left bar: baseline. Right bar: optimized. Lighting is its own stack. “Other” here is everything except heating, cooling and lighting.</p>
+        <div id="monthlyChart" class="chart"></div>
+      </div>
+
+      <div class="card wide">
+        <div class="flex between">
+          <h3>Indoor temperature through the year</h3>
+          <div class="seg" id="carpetToggle"><button data-run="best" class="on">Optimized</button><button data-run="baseline">Baseline</button></div>
+        </div>
+        <p class="small">Every hour of the year, coloured by living-zone air temperature. Columns are days, rows are hours of the day.</p>
+        <canvas id="carpet" width="1095" height="288"></canvas>
+        <div id="carpetLegend" class="legend"></div>
+      </div>
+
+      <div class="card wide">
+        <h3>All simulated candidates</h3>
+        <div class="scroll"><table class="compact" id="candTable"></table></div>
+      </div>
+
+      <div class="card wide">
+        <h3>Method &amp; assumptions</h3>
+        <div id="method" class="method"></div>
+      </div>
+    </section>
+  </main>
+  </div>
+
+  <div id="page-advisor" class="hidden">
+  <main class="grid">
+    <section class="card wide advisor-intro">
+      <div class="with-pebo advisor-hello">
+        <div class="pebo-slot peo-md" data-pebo role="img" aria-label="Pebo, a smiling sun"></div>
+        <div>
+          <h2>A local advisor</h2>
+          <p class="lead">Qwen2.5 1.5B Instruct, an open-source model (Apache-2.0), runs on this computer. It can see your latest bill, thermostat and appliance plan, and nothing is sent off the machine.</p>
+        </div>
+      </div>
+      <div id="llmStatus" class="llm-status">Checking the model…</div>
+      <button type="button" id="llmDownload" class="secondary hidden">Download the model</button>
+    </section>
+    <aside class="announce wide" role="status">
+      <b>Utility Announcements</b>
+      <p>To avoid outages in the next week, Pebo recommends that you reduce your setpoint temperature to 70 degrees from 2am to 6am and then raise your temperature to 79 degrees after.</p>
+      <div class="announce-actions">
+        <button type="button" class="announce-choice">I can't do that</button>
+        <button type="button" class="announce-choice">That's fine</button>
+      </div>
+    </aside>
+    <section class="card wide chat-card">
+      <div id="thread" class="thread">
+        <div class="bubble bot">Ask how to use the plan — when to set the thermostat back, when to run the dishwasher, or why the bill moved.</div>
+      </div>
+      <div class="suggestions" id="suggestions">
+        <button type="button" class="secondary">When should I run the dishwasher, washer and dryer?</button>
+        <button type="button" class="secondary">What thermostat settings should I use on a weekday?</button>
+        <button type="button" class="secondary">How much of my bill is lighting versus heating?</button>
+      </div>
+      <form id="ask" class="ask">
+        <input id="question" type="text" placeholder="Ask about your energy plan…" autocomplete="off">
+        <button type="submit">Ask</button>
+      </form>
+      <p class="small" id="askError"></p>
+    </section>
+  </main>
+  </div>
+
+  <footer class="foot">
+    <p>Sources: National Grid Upstate NY <a href="https://www.nationalgridus.com/Upstate-NY-Home/Voluntary-Time-of-Use-Rate/Voluntary-Time-of-Use-Rate" target="_blank" rel="noopener">VTOU hours</a>
+      and <a href="https://www.nationalgridus.com/Upstate-NY-Home/Rates/Service-Rates" target="_blank" rel="noopener">service rates</a>;
+      Buffalo Building Code via <a href="https://www.buffalony.gov/448/Building-Code" target="_blank" rel="noopener">buffalony.gov</a>;
+      EnergyPlus 26.1 prototype single-family model (CZ5A, electric resistance, crawlspace, IECC 2024) with TMY3 weather.
+      This is a decision-support prototype, not a code-compliance report or a utility bill forecast.</p>
+  </footer>
+</div>
+
+<template id="peboTpl">
+  <svg class="pebo" viewBox="0 0 200 228" aria-hidden="true">
+    <ellipse class="shade" cx="100" cy="208" rx="46" ry="8"/>
+    <g class="pebo-bob">
+      <circle class="spark" cx="24" cy="52" r="3.4"/>
+      <circle class="spark d2" cx="176" cy="40" r="2.6"/>
+      <circle class="spark d3" cx="16" cy="128" r="2.2"/>
+      <g transform="translate(100,86)">
+        <g class="pebo-rays">
+          <g fill="#ffb03a">
+            <g transform="rotate(20)"><path transform="translate(0,-32) scale(.76)" d="M-8,0 C-14,-16 1,-28 9,-42 C3,-26 11,-14 6,0 Z"/></g>
+            <g transform="rotate(60)"><path transform="translate(0,-32) scale(.76)" d="M-8,0 C-14,-16 1,-28 9,-42 C3,-26 11,-14 6,0 Z"/></g>
+            <g transform="rotate(100)"><path transform="translate(0,-32) scale(.76)" d="M-8,0 C-14,-16 1,-28 9,-42 C3,-26 11,-14 6,0 Z"/></g>
+            <g transform="rotate(140)"><path transform="translate(0,-32) scale(.76)" d="M-8,0 C-14,-16 1,-28 9,-42 C3,-26 11,-14 6,0 Z"/></g>
+            <g transform="rotate(180)"><path transform="translate(0,-32) scale(.76)" d="M-8,0 C-14,-16 1,-28 9,-42 C3,-26 11,-14 6,0 Z"/></g>
+            <g transform="rotate(220)"><path transform="translate(0,-32) scale(.76)" d="M-8,0 C-14,-16 1,-28 9,-42 C3,-26 11,-14 6,0 Z"/></g>
+            <g transform="rotate(260)"><path transform="translate(0,-32) scale(.76)" d="M-8,0 C-14,-16 1,-28 9,-42 C3,-26 11,-14 6,0 Z"/></g>
+            <g transform="rotate(300)"><path transform="translate(0,-32) scale(.76)" d="M-8,0 C-14,-16 1,-28 9,-42 C3,-26 11,-14 6,0 Z"/></g>
+            <g transform="rotate(340)"><path transform="translate(0,-32) scale(.76)" d="M-8,0 C-14,-16 1,-28 9,-42 C3,-26 11,-14 6,0 Z"/></g>
+          </g>
+          <g fill="#f26b1d">
+            <g transform="rotate(0)"><path transform="translate(0,-34)" d="M-9,0 C-16,-18 1,-32 12,-50 C4,-30 14,-16 7,0 Z"/></g>
+            <g transform="rotate(40)"><path transform="translate(0,-34)" d="M-9,0 C-16,-18 1,-32 12,-50 C4,-30 14,-16 7,0 Z"/></g>
+            <g transform="rotate(80)"><path transform="translate(0,-34)" d="M-9,0 C-16,-18 1,-32 12,-50 C4,-30 14,-16 7,0 Z"/></g>
+            <g transform="rotate(120)"><path transform="translate(0,-34)" d="M-9,0 C-16,-18 1,-32 12,-50 C4,-30 14,-16 7,0 Z"/></g>
+            <g transform="rotate(160)"><path transform="translate(0,-34)" d="M-9,0 C-16,-18 1,-32 12,-50 C4,-30 14,-16 7,0 Z"/></g>
+            <g transform="rotate(200)"><path transform="translate(0,-34)" d="M-9,0 C-16,-18 1,-32 12,-50 C4,-30 14,-16 7,0 Z"/></g>
+            <g transform="rotate(240)"><path transform="translate(0,-34)" d="M-9,0 C-16,-18 1,-32 12,-50 C4,-30 14,-16 7,0 Z"/></g>
+            <g transform="rotate(280)"><path transform="translate(0,-34)" d="M-9,0 C-16,-18 1,-32 12,-50 C4,-30 14,-16 7,0 Z"/></g>
+            <g transform="rotate(320)"><path transform="translate(0,-34)" d="M-9,0 C-16,-18 1,-32 12,-50 C4,-30 14,-16 7,0 Z"/></g>
+          </g>
+        </g>
+      </g>
+      <ellipse cx="74" cy="180" rx="18" ry="12" fill="#f2b310"/>
+      <ellipse cx="126" cy="180" rx="18" ry="12" fill="#f2b310"/>
+      <path d="M58 142 C40 154 34 172 46 186" fill="none" stroke="#f2b310" stroke-width="16" stroke-linecap="round"/>
+      <g transform="translate(142,128)">
+        <g class="pebo-arm">
+          <path d="M0 0 C12 -22 18 -46 22 -64" fill="none" stroke="#f2b310" stroke-width="15" stroke-linecap="round"/>
+          <circle cx="24" cy="-72" r="10" fill="#f2b310"/>
+        </g>
+      </g>
+      <circle cx="100" cy="148" r="46" fill="#f2b310"/>
+      <ellipse cx="84" cy="132" rx="16" ry="10" fill="#ffe08a" opacity=".4"/>
+      <ellipse cx="100" cy="156" rx="22" ry="16" fill="#ff8a2a"/>
+      <circle cx="100" cy="86" r="40" fill="#f2b310"/>
+      <ellipse cx="84" cy="72" rx="14" ry="9" fill="#ffe9a8" opacity=".55"/>
+      <ellipse cx="74" cy="96" rx="8" ry="5.5" fill="#ff7fae"/>
+      <ellipse cx="126" cy="96" rx="8" ry="5.5" fill="#ff7fae"/>
+      <path d="M76 82 Q86 72 96 82" fill="none" stroke="#1a1208" stroke-width="2.5" stroke-linecap="round"/>
+      <path d="M78 80 L74 72" fill="none" stroke="#1a1208" stroke-width="1.7" stroke-linecap="round"/>
+      <path d="M86 74 L86 66" fill="none" stroke="#1a1208" stroke-width="1.7" stroke-linecap="round"/>
+      <path d="M94 80 L100 73" fill="none" stroke="#1a1208" stroke-width="1.7" stroke-linecap="round"/>
+      <path d="M104 82 Q114 72 124 82" fill="none" stroke="#1a1208" stroke-width="2.5" stroke-linecap="round"/>
+      <path d="M106 80 L100 73" fill="none" stroke="#1a1208" stroke-width="1.7" stroke-linecap="round"/>
+      <path d="M114 74 L114 66" fill="none" stroke="#1a1208" stroke-width="1.7" stroke-linecap="round"/>
+      <path d="M122 80 L126 72" fill="none" stroke="#1a1208" stroke-width="1.7" stroke-linecap="round"/>
+      <path d="M90 102 Q100 114 110 102" fill="none" stroke="#1a1208" stroke-width="2.7" stroke-linecap="round"/>
+    </g>
+  </svg>
+</template>
+<script src="wattwise.js"></script>
+<script src="charts.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
